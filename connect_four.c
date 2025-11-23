@@ -48,7 +48,6 @@ int isBoardFull(char board[ROWS][COLS]) {
 }
 
 // Check win only around the last placed piece.
-// Much simpler and faster than scanning everything.
 int checkWin(char board[ROWS][COLS], char piece, int last_row, int last_col) {
     // Horizontal
     int horiz = countDirection(board, piece, last_row, last_col, 0, 1) +
@@ -77,10 +76,16 @@ int main(void) {
     char board[ROWS][COLS];
     initializeBoard(board);
 
-    // Seed RNG for CPU random moves
+    // Seed RNG for CPU move tie-breaking
     srand((unsigned int)time(NULL));
 
     int mode = selectGameMode(); // 1 = HvH, 2 = HvCPU
+
+    // NEW: if CPU mode, let user choose difficulty
+    if (mode == 2) {
+        selectCPUDifficulty(); // stores depth inside io_engine.c
+    }
+
     char currentPlayer = PLAYER1;
 
     while (1) {
@@ -98,7 +103,6 @@ int main(void) {
 
         int row = dropPiece(board, col, currentPlayer);
 
-        // Win check after drop
         if (checkWin(board, currentPlayer, row, col)) {
             displayBoard(board);
             if (mode == 2 && currentPlayer == PLAYER2)
@@ -108,14 +112,12 @@ int main(void) {
             break;
         }
 
-        // Draw check
         if (isBoardFull(board)) {
             displayBoard(board);
             printf("It's a draw!\n");
             break;
         }
 
-        // Switch player
         currentPlayer = (currentPlayer == PLAYER1) ? PLAYER2 : PLAYER1;
     }
 
