@@ -23,4 +23,7 @@ int  getCPUMove(char board[ROWS][COLS], char piece);
 int  isMoveValid(char board[ROWS][COLS], int col);
 int  selectGameMode(void);
 
+// NEW: lets the user choose CPU difficulty (depth)
+int  selectCPUDifficulty(void);
+
 #endif
