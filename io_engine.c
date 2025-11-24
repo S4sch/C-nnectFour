@@ -145,6 +145,9 @@ int getHumanMove(char board[ROWS][COLS], char piece) {
 
 #define INF 1000000
 
+// Center-first move order for better alpha-beta pruning
+static const int columnOrder[COLS] = {3, 2, 4, 1, 5, 0, 6};
+
 static int getLandingRow(char board[ROWS][COLS], int col) {
     if (col < 0 || col >= COLS) return -1;
     for (int r = ROWS - 1; r >= 0; r--) {
@@ -265,8 +268,8 @@ static int hasAnyValidMove(char board[ROWS][COLS]) {
 static int minimax(char board[ROWS][COLS], int depth, int alpha, int beta,
                    int maximizingPlayer, char cpu, char human) {
 
-	if (hasWon(board, cpu))   return  500000 + depth;
-	if (hasWon(board, human)) return -500000 - depth;
+    if (hasWon(board, cpu))   return  500000 + depth;
+    if (hasWon(board, human)) return -500000 - depth;
 
     if (depth == 0 || !hasAnyValidMove(board)) {
         return evaluateBoard(board, cpu, human);
@@ -274,7 +277,9 @@ static int minimax(char board[ROWS][COLS], int depth, int alpha, int beta,
 
     if (maximizingPlayer) {
         int bestVal = -INF;
-        for (int c = 0; c < COLS; c++) {
+
+        for (int i = 0; i < COLS; i++) {
+            int c = columnOrder[i];
             int r = getLandingRow(board, c);
             if (r == -1) continue;
 
@@ -284,12 +289,14 @@ static int minimax(char board[ROWS][COLS], int depth, int alpha, int beta,
 
             if (val > bestVal) bestVal = val;
             if (val > alpha) alpha = val;
-            if (alpha >= beta) break;
+            if (alpha >= beta) break;  // alpha-beta prune
         }
         return bestVal;
     } else {
         int bestVal = INF;
-        for (int c = 0; c < COLS; c++) {
+
+        for (int i = 0; i < COLS; i++) {
+            int c = columnOrder[i];
             int r = getLandingRow(board, c);
             if (r == -1) continue;
 
@@ -299,7 +306,7 @@ static int minimax(char board[ROWS][COLS], int depth, int alpha, int beta,
 
             if (val < bestVal) bestVal = val;
             if (val < beta) beta = val;
-            if (alpha >= beta) break;
+            if (alpha >= beta) break;  // alpha-beta prune
         }
         return bestVal;
     }
@@ -315,7 +322,9 @@ int getCPUMove(char board[ROWS][COLS], char cpuPiece) {
     int bestCols[COLS];
     int bestCount = 0;
 
-    for (int c = 0; c < COLS; c++) {
+    // Use center-first order here as well
+    for (int i = 0; i < COLS; i++) {
+        int c = columnOrder[i];
         int r = getLandingRow(board, c);
         if (r == -1) continue;
 
@@ -336,6 +345,7 @@ int getCPUMove(char board[ROWS][COLS], char cpuPiece) {
         return bestCols[rand() % bestCount];
     }
 
+    // Fallback: just pick the first valid move in natural order
     for (int c = 0; c < COLS; c++) {
         if (isMoveValid(board, c)) return c;
     }
