@@ -18,11 +18,12 @@ int  isBoardFull(char board[ROWS][COLS]);
 
 // -------- I/O + display + CPU (io_engine.c) --------
 void displayBoard(char board[ROWS][COLS]);
+void displayBoardWin(char board[ROWS][COLS], char winner, int last_row, int last_col);
 int  getHumanMove(char board[ROWS][COLS], char piece);
 int  getCPUMove(char board[ROWS][COLS], char piece);
 int  isMoveValid(char board[ROWS][COLS], int col);
 int  selectGameMode(void);
-int selectColorMode(void);
+int  selectColorMode(void);
 
 // NEW: lets the user choose CPU difficulty (depth)
 int  selectCPUDifficulty(void);

@@ -18,6 +18,8 @@ static int gColorMode = 0;
 #define CLR_P1           "\x1b[31m"  // red for PLAYER1
 #define CLR_P2           "\x1b[34m"  // blue for PLAYER2
 #define CLR_THREAT_EMPTY "\x1b[33m"  // yellow for empty threat cells
+#define CLR_RESET "\x1b[0m"
+#define CLR_WIN   "\x1b[32m" 
 
 
 // ---------- SAFE INTEGER INPUT ----------
@@ -105,7 +107,99 @@ int selectCPUDifficulty(void) {
     return cpuDepth;
 }
 
-//For color mode, checking combinations
+//Shows the winning combination in Green
+static void computeWinMask(char board[ROWS][COLS],
+                           char piece,
+                           int last_row, int last_col,
+                           int winMask[ROWS][COLS]) {
+    // Clear mask
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            winMask[r][c] = 0;
+        }
+    }
+
+    // Directions: horiz, vert, diag down-right, diag up-right
+    const int dr[4] = { 0,  1,  1, -1};
+    const int dc[4] = { 1,  0,  1,  1};
+
+    // Try each direction; for each, slide a 4-length window that includes (last_row,last_col)
+    for (int d = 0; d < 4; d++) {
+        int dir_r = dr[d];
+        int dir_c = dc[d];
+
+        // Offsets so that the 4-cell window includes (last_row,last_col)
+        for (int offset = -3; offset <= 0; offset++) {
+            int r0 = last_row + offset * dir_r;
+            int c0 = last_col + offset * dir_c;
+
+            // Check if 4 cells starting at (r0,c0) are all on-board and match `piece`
+            int count = 0;
+            for (int i = 0; i < 4; i++) {
+                int rr = r0 + i * dir_r;
+                int cc = c0 + i * dir_c;
+
+                if (rr < 0 || rr >= ROWS || cc < 0 || cc >= COLS) {
+                    count = -1;
+                    break;
+                }
+                if (board[rr][cc] != piece) {
+                    count = -1;
+                    break;
+                }
+                count++;
+            }
+
+            if (count == 4) {
+                // Mark winning cells
+                for (int i = 0; i < 4; i++) {
+                    int rr = r0 + i * dir_r;
+                    int cc = c0 + i * dir_c;
+                    winMask[rr][cc] = 1;
+                }
+                return; // only one winning line needed
+            }
+        }
+    }
+}
+
+void displayBoardWin(char board[ROWS][COLS], char winner,
+                     int last_row, int last_col) {
+    int winMask[ROWS][COLS];
+    computeWinMask(board, winner, last_row, last_col, winMask);
+
+    // Always ignore color mode and threat coloring here:
+    // only show winning four in green, others plain.
+
+    printf("\n  ");
+    for (int c = 0; c < COLS; c++) {
+        printf(" %d ", c + 1);
+    }
+    printf("\n");
+
+    for (int r = 0; r < ROWS; r++) {
+        printf(" |");
+        for (int c = 0; c < COLS; c++) {
+            char cell = board[r][c];
+            if (winMask[r][c]) {
+                // Winning four -> green
+                printf(" %s%c%s ", CLR_WIN, cell, CLR_RESET);
+            } else {
+                // Everything else plain, no other colors
+                printf(" %c ", cell);
+            }
+        }
+        printf("|\n");
+    }
+
+    printf("  ");
+    for (int c = 0; c < COLS; c++) {
+        printf("---");
+    }
+    printf("-\n\n");
+}
+
+//For color mode, checking combinations of 3 and shows them with color
 static void computeThreatMasks(char board[ROWS][COLS],
                                int threatP1[ROWS][COLS],
                                int threatP2[ROWS][COLS]) {

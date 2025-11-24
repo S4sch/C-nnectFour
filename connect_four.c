@@ -135,14 +135,14 @@ int main(void) {
 
             int row = dropPiece(board, col, currentPlayer);
 
-            if (checkWin(board, currentPlayer, row, col)) {
-                displayBoard(board);
-                if (mode == 2 && currentPlayer == PLAYER2)
-                    printf("CPU (%c) wins!\n", currentPlayer);
-                else
-                    printf("Player %c wins!\n", currentPlayer);
-                break;
-            }
+			if (checkWin(board, currentPlayer, row, col)) {
+				displayBoardWin(board, currentPlayer, row, col);
+				if (mode == 2 && currentPlayer == PLAYER2)
+					printf("CPU (%c) wins!\n", currentPlayer);
+				else
+					printf("Player %c wins!\n", currentPlayer);
+				break;
+			}
 
             if (isBoardFull(board)) {
                 displayBoard(board);
