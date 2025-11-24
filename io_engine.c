@@ -10,6 +10,16 @@
 // =======================================================
 
 
+// Enable/disable color threat highlighting.
+static int gColorMode = 0;
+
+// Simple ANSI color codes
+#define CLR_RESET        "\x1b[0m"
+#define CLR_P1           "\x1b[31m"  // red for PLAYER1
+#define CLR_P2           "\x1b[34m"  // blue for PLAYER2
+#define CLR_THREAT_EMPTY "\x1b[33m"  // yellow for empty threat cells
+
+
 // ---------- SAFE INTEGER INPUT ----------
 
 static int readInt(const char *prompt, int *out) {
@@ -31,6 +41,21 @@ static int readInt(const char *prompt, int *out) {
 
     *out = (int)val;
     return 1;
+}
+
+int selectColorMode(void) {
+    int choice = 0;
+    while (choice != 1 && choice != 2) {
+        printf("\nColor mode:\n");
+        printf("1) Off (plain board)\n");
+        printf("2) On  (show threats in color)\n");
+        if (!readInt("Choice: ", &choice)) {
+            printf("Invalid input. Please enter 1 or 2.\n");
+        }
+    }
+    gColorMode = (choice == 2);
+    printf("Color mode %s.\n", gColorMode ? "ON" : "OFF");
+    return gColorMode;
 }
 
 
@@ -58,30 +83,161 @@ static int cpuDepth = 4;
 
 int selectCPUDifficulty(void) {
     int choice = 0;
-    while (choice < 1 || choice > 3) {
+    while (choice < 1 || choice > 4) {
         printf("\nChoose CPU difficulty:\n");
-        printf("1) Easy   (looks 3 moves ahead)\n");
-        printf("2) Normal (looks 4 moves ahead)\n");
-        printf("3) Hard   (looks 5 moves ahead)\n");
+        printf("1) Easy       (looks 3 moves ahead)\n");
+        printf("2) Normal     (looks 4 moves ahead)\n");
+        printf("3) Hard       (looks 5 moves ahead)\n");
+        printf("4) Almost Perfect    (looks 8 moves ahead, may be slow)\n");
 
         if (!readInt("Difficulty: ", &choice)) {
-            printf("Invalid input. Please enter 1, 2 or 3.\n");
+            printf("Invalid input. Please enter 1, 2, 3 or 4.\n");
             continue;
         }
     }
 
-    if (choice == 1) cpuDepth = 3;
-    if (choice == 2) cpuDepth = 4;
-    if (choice == 3) cpuDepth = 5;
+    if (choice == 1)      cpuDepth = 3;
+    else if (choice == 2) cpuDepth = 4;
+    else if (choice == 3) cpuDepth = 5;
+    else if (choice == 4) cpuDepth = 8;
 
     printf("CPU difficulty set to depth %d.\n", cpuDepth);
     return cpuDepth;
 }
 
+//For color mode, checking combinations
+static void computeThreatMasks(char board[ROWS][COLS],
+                               int threatP1[ROWS][COLS],
+                               int threatP2[ROWS][COLS]) {
+    // Clear masks
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            threatP1[r][c] = 0;
+            threatP2[r][c] = 0;
+        }
+    }
+
+    // Helper lambda-ish macro for marking a window
+    #define MARK_WINDOW(r0, c0, dr, dc, player, mask)           \
+        do {                                                   \
+            for (int i = 0; i < 4; i++) {                      \
+                int rr = (r0) + i * (dr);                      \
+                int cc = (c0) + i * (dc);                      \
+                mask[rr][cc] = 1;                              \
+            }                                                  \
+        } while (0)
+
+    // Scan all windows of length 4
+    // Horizontal
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c <= COLS - 4; c++) {
+            int p1 = 0, p2 = 0, empty = 0;
+            for (int i = 0; i < 4; i++) {
+                char cell = board[r][c + i];
+                if (cell == PLAYER1) p1++;
+                else if (cell == PLAYER2) p2++;
+                else empty++;
+            }
+            // Threat = 3 in a row + 1 empty, with no opponent pieces
+            if (p1 == 3 && p2 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, 0, 1, PLAYER1, threatP1);
+            } else if (p2 == 3 && p1 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, 0, 1, PLAYER2, threatP2);
+            }
+        }
+    }
+
+    // Vertical
+    for (int c = 0; c < COLS; c++) {
+        for (int r = 0; r <= ROWS - 4; r++) {
+            int p1 = 0, p2 = 0, empty = 0;
+            for (int i = 0; i < 4; i++) {
+                char cell = board[r + i][c];
+                if (cell == PLAYER1) p1++;
+                else if (cell == PLAYER2) p2++;
+                else empty++;
+            }
+            if (p1 == 3 && p2 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, 1, 0, PLAYER1, threatP1);
+            } else if (p2 == 3 && p1 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, 1, 0, PLAYER2, threatP2);
+            }
+        }
+    }
+
+    // Diagonal down-right
+    for (int r = 0; r <= ROWS - 4; r++) {
+        for (int c = 0; c <= COLS - 4; c++) {
+            int p1 = 0, p2 = 0, empty = 0;
+            for (int i = 0; i < 4; i++) {
+                char cell = board[r + i][c + i];
+                if (cell == PLAYER1) p1++;
+                else if (cell == PLAYER2) p2++;
+                else empty++;
+            }
+            if (p1 == 3 && p2 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, 1, 1, PLAYER1, threatP1);
+            } else if (p2 == 3 && p1 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, 1, 1, PLAYER2, threatP2);
+            }
+        }
+    }
+
+    // Diagonal up-right
+    for (int r = 3; r < ROWS; r++) {
+        for (int c = 0; c <= COLS - 4; c++) {
+            int p1 = 0, p2 = 0, empty = 0;
+            for (int i = 0; i < 4; i++) {
+                char cell = board[r - i][c + i];
+                if (cell == PLAYER1) p1++;
+                else if (cell == PLAYER2) p2++;
+                else empty++;
+            }
+            if (p1 == 3 && p2 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, -1, 1, PLAYER1, threatP1);
+            } else if (p2 == 3 && p1 == 0 && empty == 1) {
+                MARK_WINDOW(r, c, -1, 1, PLAYER2, threatP2);
+            }
+        }
+    }
+
+    #undef MARK_WINDOW
+}
+
+
 
 // ---------- BOARD DISPLAY ----------
 
 void displayBoard(char board[ROWS][COLS]) {
+    // If color mode is off, use simple old-style display
+    if (!gColorMode) {
+        printf("\n  ");
+        for (int c = 0; c < COLS; c++) {
+            printf(" %d ", c + 1);
+        }
+        printf("\n");
+
+        for (int r = 0; r < ROWS; r++) {
+            printf(" |");
+            for (int c = 0; c < COLS; c++) {
+                printf(" %c ", board[r][c]);
+            }
+            printf("|\n");
+        }
+
+        printf("  ");
+        for (int c = 0; c < COLS; c++) {
+            printf("---");
+        }
+        printf("-\n\n");
+        return;
+    }
+
+    // Color mode: compute threat masks
+    int threatP1[ROWS][COLS];
+    int threatP2[ROWS][COLS];
+    computeThreatMasks(board, threatP1, threatP2);
+
     printf("\n  ");
     for (int c = 0; c < COLS; c++) {
         printf(" %d ", c + 1);
@@ -91,7 +247,20 @@ void displayBoard(char board[ROWS][COLS]) {
     for (int r = 0; r < ROWS; r++) {
         printf(" |");
         for (int c = 0; c < COLS; c++) {
-            printf(" %c ", board[r][c]);
+            char cell = board[r][c];
+            const char *color = CLR_RESET;
+
+            if (cell == PLAYER1 && threatP1[r][c]) {
+                color = CLR_P1;                 // red X in a threat line
+            } else if (cell == PLAYER2 && threatP2[r][c]) {
+                color = CLR_P2;                 // blue O in a threat line
+            } else if (cell == EMPTY && (threatP1[r][c] || threatP2[r][c])) {
+                color = CLR_THREAT_EMPTY;       // yellow '.' that would complete 4
+            } else {
+                color = CLR_RESET;
+            }
+
+            printf(" %s%c%s ", color, cell, CLR_RESET);
         }
         printf("|\n");
     }
@@ -192,30 +361,84 @@ static int hasWon(char board[ROWS][COLS], char piece) {
     return 0;
 }
 
-static int scoreWindow(char w[4], char cpu, char human) {
+// ---------- Gravity + double-threat aware evaluation ----------
+
+// Is this empty cell actually playable *now* by dropping in its column?
+static int isPlayableCell(char board[ROWS][COLS], int r, int c) {
+    if (board[r][c] != EMPTY) return 0;
+    return (r == ROWS - 1 || board[r + 1][c] != EMPTY);
+}
+
+// Count how many different moves for `piece` would win immediately next turn.
+static int countImmediateWins(char board[ROWS][COLS], char piece) {
+    int count = 0;
+
+    for (int c = 0; c < COLS; c++) {
+        int r = getLandingRow(board, c);
+        if (r == -1) continue;
+
+        board[r][c] = piece;
+        if (hasWon(board, piece)) {
+            count++;
+        }
+        board[r][c] = EMPTY;
+    }
+
+    return count;
+}
+
+// Score a specific 4-cell window starting at (r0,c0) in direction (dr,dc)
+static int scoreWindowAt(char board[ROWS][COLS],
+                         int r0, int c0, int dr, int dc,
+                         char cpu, char human) {
     int cpuCount = 0, humanCount = 0, emptyCount = 0;
+    int playableEmptyCount = 0;
+
     for (int i = 0; i < 4; i++) {
-        if (w[i] == cpu) cpuCount++;
-        else if (w[i] == human) humanCount++;
-        else emptyCount++;
+        int r = r0 + i * dr;
+        int c = c0 + i * dc;
+        char cell = board[r][c];
+
+        if (cell == cpu) {
+            cpuCount++;
+        } else if (cell == human) {
+            humanCount++;
+        } else {
+            emptyCount++;
+            if (isPlayableCell(board, r, c)) {
+                playableEmptyCount++;
+            }
+        }
     }
 
     int score = 0;
 
-    if (cpuCount == 4) score += 100000;
-    else if (cpuCount == 3 && emptyCount == 1) score += 120;
-    else if (cpuCount == 2 && emptyCount == 2) score += 10;
+    // Good patterns for CPU
+    if (cpuCount == 4) {
+        score += 100000;   // already winning pattern
+    } else if (cpuCount == 3 && emptyCount == 1) {
+        // Stronger if the empty spot is actually playable
+        if (playableEmptyCount > 0) score += 180;
+        else                        score += 60;
+    } else if (cpuCount == 2 && emptyCount == 2) {
+        score += 10;
+    }
 
-    if (humanCount == 3 && emptyCount == 1) score -= 140;
-    else if (humanCount == 2 && emptyCount == 2) score -= 10;
+    // Good patterns for human (bad for CPU)
+    if (humanCount == 3 && emptyCount == 1) {
+        if (playableEmptyCount > 0) score -= 220;  // urgent to block
+        else                        score -= 80;
+    } else if (humanCount == 2 && emptyCount == 2) {
+        score -= 10;
+    }
 
     return score;
 }
 
 static int evaluateBoard(char board[ROWS][COLS], char cpu, char human) {
     int score = 0;
-    char w[4];
 
+    // Center column bonus
     int center = COLS / 2;
     int centerCount = 0;
     for (int r = 0; r < ROWS; r++) {
@@ -223,36 +446,50 @@ static int evaluateBoard(char board[ROWS][COLS], char cpu, char human) {
     }
     score += centerCount * 6;
 
+    // Horizontal windows
     for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c <= COLS - 4; c++) {
-            w[0]=board[r][c]; w[1]=board[r][c+1];
-            w[2]=board[r][c+2]; w[3]=board[r][c+3];
-            score += scoreWindow(w, cpu, human);
+            score += scoreWindowAt(board, r, c, 0, 1, cpu, human);
         }
     }
 
+    // Vertical windows
     for (int c = 0; c < COLS; c++) {
         for (int r = 0; r <= ROWS - 4; r++) {
-            w[0]=board[r][c]; w[1]=board[r+1][c];
-            w[2]=board[r+2][c]; w[3]=board[r+3][c];
-            score += scoreWindow(w, cpu, human);
+            score += scoreWindowAt(board, r, c, 1, 0, cpu, human);
         }
     }
 
+    // Diagonal down-right
     for (int r = 0; r <= ROWS - 4; r++) {
         for (int c = 0; c <= COLS - 4; c++) {
-            w[0]=board[r][c]; w[1]=board[r+1][c+1];
-            w[2]=board[r+2][c+2]; w[3]=board[r+3][c+3];
-            score += scoreWindow(w, cpu, human);
+            score += scoreWindowAt(board, r, c, 1, 1, cpu, human);
         }
     }
 
+    // Diagonal up-right
     for (int r = 3; r < ROWS; r++) {
         for (int c = 0; c <= COLS - 4; c++) {
-            w[0]=board[r][c]; w[1]=board[r-1][c+1];
-            w[2]=board[r-2][c+2]; w[3]=board[r-3][c+3];
-            score += scoreWindow(w, cpu, human);
+            score += scoreWindowAt(board, r, c, -1, 1, cpu, human);
         }
+    }
+
+    // Double-threat / immediate-win counting
+    int cpuWinNext = countImmediateWins(board, cpu);
+    int humanWinNext = countImmediateWins(board, human);
+
+    if (cpuWinNext >= 2) {
+        // Multiple winning moves next turn is incredibly strong
+        score += 20000 * cpuWinNext;
+    } else if (cpuWinNext == 1) {
+        score += 5000;
+    }
+
+    if (humanWinNext >= 2) {
+        // Opponent double threat is catastrophic
+        score -= 25000 * humanWinNext;
+    } else if (humanWinNext == 1) {
+        score -= 6000;
     }
 
     return score;
@@ -268,6 +505,7 @@ static int hasAnyValidMove(char board[ROWS][COLS]) {
 static int minimax(char board[ROWS][COLS], int depth, int alpha, int beta,
                    int maximizingPlayer, char cpu, char human) {
 
+    // Terminal win/loss checks with depth-based bonuses
     if (hasWon(board, cpu))   return  500000 + depth;
     if (hasWon(board, human)) return -500000 - depth;
 

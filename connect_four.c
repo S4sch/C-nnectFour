@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <ctype.h>
 #include "connect_four.h"
 
 // Count consecutive pieces in a direction (dr, dc),
@@ -72,54 +73,90 @@ int checkWin(char board[ROWS][COLS], char piece, int last_row, int last_col) {
     return 0;
 }
 
-int main(void) {
-    char board[ROWS][COLS];
-    initializeBoard(board);
+// -------- Ask user if they want to play again --------
+static int askPlayAgain(void) {
+    char buf[16];
 
+    while (1) {
+        printf("\nPlay again? (y/n): ");
+        if (!fgets(buf, sizeof(buf), stdin)) {
+            // Input error / EOF: treat as "no"
+            return 0;
+        }
+
+        // Skip leading whitespace
+        char *p = buf;
+        while (*p && isspace((unsigned char)*p)) p++;
+
+        if (*p == 'y' || *p == 'Y') {
+            return 1;
+        } else if (*p == 'n' || *p == 'N') {
+            return 0;
+        } else {
+            printf("Please enter 'y' or 'n'.\n");
+        }
+    }
+}
+
+int main(void) {
     // Seed RNG for CPU move tie-breaking
     srand((unsigned int)time(NULL));
 
-    int mode = selectGameMode(); // 1 = HvH, 2 = HvCPU
+    // Outer loop: repeat whole games
+    do {
+		// Choose mode once at the start
+		int mode = selectGameMode(); // 1 = HvH, 2 = HvCPU
 
-    // NEW: if CPU mode, let user choose difficulty
-    if (mode == 2) {
-        selectCPUDifficulty(); // stores depth inside io_engine.c
-    }
+		// If CPU mode, let user choose difficulty
+		if (mode == 2) {
+			selectCPUDifficulty();
+		}
+		//Select whether or not to play with color
+		selectColorMode();
+		
+        char board[ROWS][COLS];
+        initializeBoard(board);
 
-    char currentPlayer = PLAYER1;
+        char currentPlayer = PLAYER1;
 
-    while (1) {
-        displayBoard(board);
-
-        int col;
-        if (mode == 2 && currentPlayer == PLAYER2) {
-            // CPU turn
-            col = getCPUMove(board, currentPlayer);
-            printf("CPU chooses column %d\n", col + 1);
-        } else {
-            // Human turn
-            col = getHumanMove(board, currentPlayer);
-        }
-
-        int row = dropPiece(board, col, currentPlayer);
-
-        if (checkWin(board, currentPlayer, row, col)) {
+        // Single-game loop
+        while (1) {
             displayBoard(board);
-            if (mode == 2 && currentPlayer == PLAYER2)
-                printf("CPU (%c) wins!\n", currentPlayer);
-            else
-                printf("Player %c wins!\n", currentPlayer);
-            break;
+
+            int col;
+            if (mode == 2 && currentPlayer == PLAYER2) {
+                // CPU turn
+                col = getCPUMove(board, currentPlayer);
+                printf("CPU chooses column %d\n", col + 1);
+            } else {
+                // Human turn
+                col = getHumanMove(board, currentPlayer);
+            }
+
+            int row = dropPiece(board, col, currentPlayer);
+
+            if (checkWin(board, currentPlayer, row, col)) {
+                displayBoard(board);
+                if (mode == 2 && currentPlayer == PLAYER2)
+                    printf("CPU (%c) wins!\n", currentPlayer);
+                else
+                    printf("Player %c wins!\n", currentPlayer);
+                break;
+            }
+
+            if (isBoardFull(board)) {
+                displayBoard(board);
+                printf("It's a draw!\n");
+                break;
+            }
+
+            currentPlayer = (currentPlayer == PLAYER1) ? PLAYER2 : PLAYER1;
         }
 
-        if (isBoardFull(board)) {
-            displayBoard(board);
-            printf("It's a draw!\n");
-            break;
-        }
+        // After one game finishes, we fall out of the inner loop.
+        // askPlayAgain() decides whether to start a new game.
+    } while (askPlayAgain());
 
-        currentPlayer = (currentPlayer == PLAYER1) ? PLAYER2 : PLAYER1;
-    }
-
+    printf("Thanks for playing!\n");
     return 0;
 }
