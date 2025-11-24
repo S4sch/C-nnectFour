@@ -265,8 +265,8 @@ static int hasAnyValidMove(char board[ROWS][COLS]) {
 static int minimax(char board[ROWS][COLS], int depth, int alpha, int beta,
                    int maximizingPlayer, char cpu, char human) {
 
-    if (hasWon(board, cpu))   return  500000;
-    if (hasWon(board, human)) return -500000;
+	if (hasWon(board, cpu))   return  500000 + depth;
+	if (hasWon(board, human)) return -500000 - depth;
 
     if (depth == 0 || !hasAnyValidMove(board)) {
         return evaluateBoard(board, cpu, human);
