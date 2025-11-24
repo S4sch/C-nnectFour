@@ -81,16 +81,16 @@ int selectGameMode(void) {
 
 // Global (file-local) CPU depth used by minimax.
 // Default is "Normal".
-static int cpuDepth = 4;
+static int cpuDepth = 2;
 
 int selectCPUDifficulty(void) {
     int choice = 0;
     while (choice < 1 || choice > 4) {
         printf("\nChoose CPU difficulty:\n");
-        printf("1) Easy       (looks 3 moves ahead)\n");
-        printf("2) Normal     (looks 4 moves ahead)\n");
-        printf("3) Hard       (looks 5 moves ahead)\n");
-        printf("4) Almost Perfect    (looks 8 moves ahead, may be slow)\n");
+        printf("1) Easy       (Simplistic Ai)\n");
+        printf("2) Normal     (SmartAI, looks 2 moves ahead)\n");
+        printf("3) Hard       (SmartAI, looks 3 moves ahead)\n");
+        printf("4) Almost Perfect    (SmartAI, looks 8 moves ahead, may be slow)\n");
 
         if (!readInt("Difficulty: ", &choice)) {
             printf("Invalid input. Please enter 1, 2, 3 or 4.\n");
@@ -98,9 +98,9 @@ int selectCPUDifficulty(void) {
         }
     }
 
-    if (choice == 1)      cpuDepth = 3;
-    else if (choice == 2) cpuDepth = 4;
-    else if (choice == 3) cpuDepth = 5;
+    if (choice == 1)      cpuDepth = 1;
+    else if (choice == 2) cpuDepth = 2;
+    else if (choice == 3) cpuDepth = 3;
     else if (choice == 4) cpuDepth = 8;
 
     printf("CPU difficulty set to depth %d.\n", cpuDepth);
@@ -568,19 +568,24 @@ static int evaluateBoard(char board[ROWS][COLS], char cpu, char human) {
         }
     }
 
-    // Double-threat / immediate-win counting
-    int cpuWinNext = countImmediateWins(board, cpu);
+    // For Easy difficulty (cpuDepth == 1), we *skip* the
+    // immediate-win / double-threat lookahead.
+    extern int cpuDepth;      // or remove 'static' from the definition above
+    if (cpuDepth == 1) {
+        return score;
+    }
+
+    // Double-threat / immediate-win counting (for Normal+)
+    int cpuWinNext   = countImmediateWins(board, cpu);
     int humanWinNext = countImmediateWins(board, human);
 
     if (cpuWinNext >= 2) {
-        // Multiple winning moves next turn is incredibly strong
         score += 20000 * cpuWinNext;
     } else if (cpuWinNext == 1) {
         score += 5000;
     }
 
     if (humanWinNext >= 2) {
-        // Opponent double threat is catastrophic
         score -= 25000 * humanWinNext;
     } else if (humanWinNext == 1) {
         score -= 6000;
