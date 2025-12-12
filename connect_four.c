@@ -2,7 +2,12 @@
 #include <stdlib.h>
 #include <time.h>
 #include <ctype.h>
+#include <string.h>
+
 #include "connect_four.h"
+#include "rl_agent.h"
+
+// ---------------- Core win-check helpers ----------------
 
 // Count consecutive pieces in a direction (dr, dc),
 // starting from (start_r, start_c), inclusive.
@@ -98,22 +103,52 @@ static int askPlayAgain(void) {
     }
 }
 
+// ---------------- Self-learning agent ----------------
+
+static RLAgent gAgent;
+#define MODEL_PATH "c4_model.bin"
+
+// ---------------- main ----------------
+
 int main(void) {
-    // Seed RNG for CPU move tie-breaking
+    // Seed RNG for CPU move tie-breaking + RL exploration
     srand((unsigned int)time(NULL));
+
+    // Init + load self-learning agent
+    rl_init(&gAgent);
+    if (rl_load(&gAgent, MODEL_PATH)) {
+        printf("Loaded self-learning model from %s\n", MODEL_PATH);
+    } else {
+        printf("No self-learning model found at %s. Starting fresh.\n", MODEL_PATH);
+    }
 
     // Outer loop: repeat whole games
     do {
-		// Choose mode once at the start
-		int mode = selectGameMode(); // 1 = HvH, 2 = HvCPU
+        int mode = selectGameMode();
 
-		// If CPU mode, let user choose difficulty
-		if (mode == 2) {
-			selectCPUDifficulty();
-		}
-		//Select whether or not to play with color
-		selectColorMode();
-		
+        // If minimax CPU mode, let user choose difficulty (depth)
+        if (mode == 2) {
+            selectCPUDifficulty();
+        }
+
+        // Select whether or not to play with color
+        selectColorMode();
+
+        // Training mode (self-play)
+        if (mode == 4) {
+            int games = promptTrainingGames();
+            printf("\nTraining self-learning AI for %d games...\n", games);
+            rl_train_selfplay(&gAgent, games);
+            if (rl_save(&gAgent, MODEL_PATH)) {
+                printf("Training complete. Saved model to %s\n", MODEL_PATH);
+            } else {
+                printf("Training complete, but failed to save model to %s\n", MODEL_PATH);
+            }
+            printf("\nNow that it has saved, you will play against it.\n");
+            // After training, immediately let the user play against it
+            mode = 3;
+        }
+
         char board[ROWS][COLS];
         initializeBoard(board);
 
@@ -123,26 +158,37 @@ int main(void) {
         while (1) {
             displayBoard(board);
 
-            int col;
-            if (mode == 2 && currentPlayer == PLAYER2) {
-                // CPU turn
-                col = getCPUMove(board, currentPlayer);
-                printf("CPU chooses column %d\n", col + 1);
+            int col = 0;
+
+            if (currentPlayer == PLAYER2) {
+                if (mode == 2) {
+                    // Minimax CPU
+                    col = getCPUMove(board, currentPlayer);
+                    printf("CPU chooses column %d\n", col + 1);
+                } else if (mode == 3) {
+                    // Self-learning AI
+					col = rl_choose_move(&gAgent, board, currentPlayer, 0.0, 2);
+                    printf("SelfLearn AI chooses column %d\n", col + 1);
+                } else {
+                    // HvH: PLAYER2 is a human
+                    col = getHumanMove(board, currentPlayer);
+                }
             } else {
-                // Human turn
+                // PLAYER1 is always human in these modes
                 col = getHumanMove(board, currentPlayer);
             }
 
             int row = dropPiece(board, col, currentPlayer);
 
-			if (checkWin(board, currentPlayer, row, col)) {
-				displayBoardWin(board, currentPlayer, row, col);
-				if (mode == 2 && currentPlayer == PLAYER2)
-					printf("CPU (%c) wins!\n", currentPlayer);
-				else
-					printf("Player %c wins!\n", currentPlayer);
-				break;
-			}
+            if (checkWin(board, currentPlayer, row, col)) {
+                displayBoardWin(board, currentPlayer, row, col);
+                if ((mode == 2 || mode == 3) && currentPlayer == PLAYER2) {
+                    printf("%s (%c) wins!\n", (mode == 2) ? "CPU" : "SelfLearn AI", currentPlayer);
+                } else {
+                    printf("Player %c wins!\n", currentPlayer);
+                }
+                break;
+            }
 
             if (isBoardFull(board)) {
                 displayBoard(board);
@@ -153,8 +199,9 @@ int main(void) {
             currentPlayer = (currentPlayer == PLAYER1) ? PLAYER2 : PLAYER1;
         }
 
-        // After one game finishes, we fall out of the inner loop.
-        // askPlayAgain() decides whether to start a new game.
+        // Save model (harmless even if unchanged)
+        rl_save(&gAgent, MODEL_PATH);
+
     } while (askPlayAgain());
 
     printf("Thanks for playing!\n");

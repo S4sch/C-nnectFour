@@ -6,7 +6,6 @@
 
 // =======================================================
 // Input + Display + Smart CPU (Minimax)
-// Matches the flowcharts and adds CPU difficulty selection.
 // =======================================================
 
 
@@ -45,6 +44,8 @@ static int readInt(const char *prompt, int *out) {
     return 1;
 }
 
+// ---------- COLOR MODE SELECTION ----------
+
 int selectColorMode(void) {
     int choice = 0;
     while (choice != 1 && choice != 2) {
@@ -65,12 +66,16 @@ int selectColorMode(void) {
 
 int selectGameMode(void) {
     int mode = 0;
-    while (mode != 1 && mode != 2) {
+    while (mode < 1 || mode > 4) {
         printf("\nSelect mode:\n");
         printf("1) Human vs Human\n");
-        printf("2) Human vs CPU (smart AI)\n");
+        printf("2) Human vs CPU (minimax)\n");
+        printf("3) Human vs Self-Learning AI\n");
+        printf("4) Train Self-Learning AI (self-play)\n");
+
         if (!readInt("Choice: ", &mode)) {
-            printf("Invalid input. Please enter 1 or 2.\n");
+            printf("Invalid input. Please enter 1, 2, 3, or 4.\n");
+            mode = 0;
         }
     }
     return mode;
@@ -79,7 +84,7 @@ int selectGameMode(void) {
 
 // ---------- CPU DIFFICULTY SELECTION ----------
 
-// Global (file-local) CPU depth used by minimax.
+// Global CPU depth used by minimax.
 // Default is "Normal".
 static int cpuDepth = 2;
 
@@ -105,6 +110,25 @@ int selectCPUDifficulty(void) {
 
     printf("CPU difficulty set to depth %d.\n", cpuDepth);
     return cpuDepth;
+}
+//For self learning algorithm, train games
+int promptTrainingGames(void) {
+    int games = 0;
+    while (games <= 0) {
+        printf("\nHow many self-play training games? (e.g. 5000, 20000, 100000)\n");
+        if (!readInt("Games: ", &games)) {
+            printf("Invalid input. Please enter a positive number.\n");
+            continue;
+        }
+        if (games <= 0) {
+            printf("Please enter a positive number.\n");
+        }
+        if (games > 5000000) {
+            printf("That is very large. Capping to 5,000,000.\n");
+            games = 5000000;
+        }
+    }
+    return games;
 }
 
 //Shows the winning combination in Green
@@ -568,9 +592,8 @@ static int evaluateBoard(char board[ROWS][COLS], char cpu, char human) {
         }
     }
 
-    // For Easy difficulty (cpuDepth == 1), we *skip* the
-    // immediate-win / double-threat lookahead.
-    extern int cpuDepth;      // or remove 'static' from the definition above
+    // For Easy difficulty, 
+    // no immediate-win / double-threat lookahead.
     if (cpuDepth == 1) {
         return score;
     }
